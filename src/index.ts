@@ -62,7 +62,7 @@ app.use(errorHandler);
 connctDatabase();
 
 // For Render.com - listen on port
-const PORT = process.env.PORT || 8000;
+const PORT: number = parseInt(process.env.PORT || "8000", 10);
 if (process.env.NODE_ENV !== "production" || process.env.RENDER) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT} in ${Env.NODE_ENV} mode`);
