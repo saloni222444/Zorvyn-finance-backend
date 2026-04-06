@@ -29,7 +29,7 @@ app.use(
   })
 );
 
-// Health check endpoint (important for Vercel)
+// Health check endpoint
 app.get(
   "/",
   asyncHandler(async (req: Request, res: Response) => {
@@ -58,8 +58,16 @@ app.use((req: Request, res: Response) => {
 // Error handler (should be last)
 app.use(errorHandler);
 
-// Connect to database (important: don't use app.listen for Vercel)
+// Connect to database
 connctDatabase();
 
-// Export for Vercel (this is critical)
+// For Render.com - listen on port
+const PORT = process.env.PORT || 8000;
+if (process.env.NODE_ENV !== "production" || process.env.RENDER) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT} in ${Env.NODE_ENV} mode`);
+  });
+}
+
+// For Vercel (serverless)
 export default app;
