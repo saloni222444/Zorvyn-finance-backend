@@ -51,7 +51,6 @@ export const summaryAnalyticsService = async (
             ],
           },
         },
-
         transactionCount: { $sum: 1 },
       },
     },
@@ -61,9 +60,7 @@ export const summaryAnalyticsService = async (
         totalIncome: 1,
         totalExpenses: 1,
         transactionCount: 1,
-
         availableBalance: { $subtract: ["$totalIncome", "$totalExpenses"] },
-
         savingData: {
           $let: {
             vars: {
@@ -71,7 +68,6 @@ export const summaryAnalyticsService = async (
               expenses: { $ifNull: ["$totalExpenses", 0] },
             },
             in: {
-              // ((income - expenses) / income) * 100;
               savingsPercentage: {
                 $cond: [
                   { $lte: ["$$income", 0] },
@@ -89,8 +85,6 @@ export const summaryAnalyticsService = async (
                   },
                 ],
               },
-
-              //Expense Ratio = (expenses / income) * 100
               expenseRatio: {
                 $cond: [
                   { $lte: ["$$income", 0] },
@@ -125,8 +119,6 @@ export const summaryAnalyticsService = async (
     },
   } = current || {};
 
-  console.log(current, "current");
-
   let percentageChange: any = {
     income: 0,
     expenses: 0,
@@ -141,20 +133,14 @@ export const summaryAnalyticsService = async (
   };
 
   if (from && to && rangeValue !== DateRangeEnum.ALL_TIME) {
-    //last 30 days  previous las 30 days,
-
     const period = differenceInDays(to, from) + 1;
-    console.log(`${differenceInDays(to, from)}`, period, "period");
-
     const isYearly = [
       DateRangeEnum.LAST_YEAR,
       DateRangeEnum.THIS_YEAR,
-    ].includes(rangeValue);
+    ].includes(rangeValue as DateRangeEnum);
 
     const prevPeriodFrom = isYearly ? subYears(from, 1) : subDays(from, period);
-
     const prevPeriodTo = isYearly ? subYears(to, 1) : subDays(to, period);
-    console.log(prevPeriodFrom, prevPeriodTo, "Prev date");
 
     const prevPeriodPipeline = [
       {
@@ -193,20 +179,15 @@ export const summaryAnalyticsService = async (
 
     const [previous] = await TransactionModel.aggregate(prevPeriodPipeline);
 
-    console.log(previous, "Prvious Data");
     if (previous) {
       const prevIncome = previous.totalIncome || 0;
       const prevExpenses = previous.totalExpenses || 0;
       const prevBalance = prevIncome - prevExpenses;
 
-      const currentIncome = totalIncome;
-      const currentExpenses = totalExpenses;
-      const currentBalance = availableBalance;
-
       percentageChange = {
-        income: calaulatePercentageChange(prevIncome, currentIncome),
-        expenses: calaulatePercentageChange(prevExpenses, currentExpenses),
-        balance: calaulatePercentageChange(prevBalance, currentBalance),
+        income: calculatePercentageChange(prevIncome, totalIncome),
+        expenses: calculatePercentageChange(prevExpenses, totalExpenses),
+        balance: calculatePercentageChange(prevBalance, availableBalance),
         prevPeriodFrom: prevPeriodFrom,
         prevPeriodTo: prevPeriodTo,
         previousValues: {
@@ -242,9 +223,10 @@ export const summaryAnalyticsService = async (
       },
     },
     preset: {
-      ...range,
+      from: range.from,
+      to: range.to,
       value: rangeValue || DateRangeEnum.ALL_TIME,
-      label: range?.label || "All Time",
+      label: (range as any)?.label || getRangeLabel(rangeValue),
     },
   };
 };
@@ -271,7 +253,6 @@ export const chartAnalyticsService = async (
 
   const result = await TransactionModel.aggregate([
     { $match: filter },
-    //Group the transaction by date (YYYY-MM-DD)
     {
       $group: {
         _id: {
@@ -280,7 +261,6 @@ export const chartAnalyticsService = async (
             date: "$date",
           },
         },
-
         income: {
           $sum: {
             $cond: [
@@ -290,7 +270,6 @@ export const chartAnalyticsService = async (
             ],
           },
         },
-
         expenses: {
           $sum: {
             $cond: [
@@ -300,13 +279,11 @@ export const chartAnalyticsService = async (
             ],
           },
         },
-
         incomeCount: {
           $sum: {
             $cond: [{ $eq: ["$type", TransactionTypeEnum.INCOME] }, 1, 0],
           },
         },
-
         expenseCount: {
           $sum: {
             $cond: [{ $eq: ["$type", TransactionTypeEnum.EXPENSE] }, 1, 0],
@@ -314,9 +291,7 @@ export const chartAnalyticsService = async (
         },
       },
     },
-
     { $sort: { _id: 1 } },
-
     {
       $project: {
         _id: 0,
@@ -327,7 +302,6 @@ export const chartAnalyticsService = async (
         expenseCount: 1,
       },
     },
-
     {
       $group: {
         _id: null,
@@ -336,7 +310,6 @@ export const chartAnalyticsService = async (
         totalExpenseCount: { $sum: "$expenseCount" },
       },
     },
-
     {
       $project: {
         _id: 0,
@@ -348,21 +321,21 @@ export const chartAnalyticsService = async (
   ]);
 
   const resultData = result[0] || {};
-
-  const transaformedData = (resultData?.chartData || []).map((item: any) => ({
+  const transformedData = (resultData?.chartData || []).map((item: any) => ({
     date: item.date,
     income: convertToDollarUnit(item.income),
     expenses: convertToDollarUnit(item.expenses),
   }));
 
   return {
-    chartData: transaformedData,
-    totalIncomeCount: resultData.totalIncomeCount,
-    totalExpenseCount: resultData.totalExpenseCount,
+    chartData: transformedData,
+    totalIncomeCount: resultData.totalIncomeCount || 0,
+    totalExpenseCount: resultData.totalExpenseCount || 0,
     preset: {
-      ...range,
+      from: range.from,
+      to: range.to,
       value: rangeValue || DateRangeEnum.ALL_TIME,
-      label: range?.label || "All Time",
+      label: (range as any)?.label || getRangeLabel(rangeValue),
     },
   };
 };
@@ -388,18 +361,15 @@ export const expensePieChartBreakdownService = async (
       }),
   };
 
-  const pipleline: PipelineStage[] = [
-    {
-      $match: filter,
-    },
+  const pipeline: PipelineStage[] = [
+    { $match: filter },
     {
       $group: {
         _id: "$category",
         value: { $sum: { $abs: "$amount" } },
       },
     },
-    { $sort: { value: -1 } }, //
-
+    { $sort: { value: -1 } },
     {
       $facet: {
         topThree: [{ $limit: 3 }],
@@ -414,7 +384,6 @@ export const expensePieChartBreakdownService = async (
         ],
       },
     },
-
     {
       $project: {
         categories: {
@@ -422,9 +391,7 @@ export const expensePieChartBreakdownService = async (
         },
       },
     },
-
     { $unwind: "$categories" },
-
     {
       $group: {
         _id: null,
@@ -432,13 +399,11 @@ export const expensePieChartBreakdownService = async (
         breakdown: { $push: "$categories" },
       },
     },
-
     {
       $project: {
         _id: 0,
         totalSpent: 1,
         breakdown: {
-          // .map((cat: any)=> )
           $map: {
             input: "$breakdown",
             as: "cat",
@@ -469,12 +434,9 @@ export const expensePieChartBreakdownService = async (
     },
   ];
 
-  const result = await TransactionModel.aggregate(pipleline);
-
-  const data = result[0] || {
-    totalSpent: 0,
-    breakdown: [],
-  };
+  const result = await TransactionModel.aggregate(pipeline);
+  const data = result[0] || { totalSpent: 0, breakdown: [] };
+  
   const transformedData = {
     totalSpent: convertToDollarUnit(data.totalSpent),
     breakdown: data.breakdown.map((item: any) => ({
@@ -486,16 +448,38 @@ export const expensePieChartBreakdownService = async (
   return {
     ...transformedData,
     preset: {
-      ...range,
+      from: range.from,
+      to: range.to,
       value: rangeValue || DateRangeEnum.ALL_TIME,
-      label: range?.label || "All Time",
+      label: (range as any)?.label || getRangeLabel(rangeValue),
     },
   };
 };
 
-function calaulatePercentageChange(previous: number, current: number) {
+function calculatePercentageChange(previous: number, current: number) {
   if (previous === 0) return current === 0 ? 0 : 100;
   const changes = ((current - previous) / Math.abs(previous)) * 100;
   const cappedChange = Math.min(Math.max(changes, -100), 100);
   return parseFloat(cappedChange.toFixed(2));
+}
+
+function getRangeLabel(rangeValue: string | undefined): string {
+  switch (rangeValue) {
+    case DateRangeEnum.LAST_30_DAYS:
+      return "Last 30 Days";
+    case DateRangeEnum.THIS_MONTH:
+      return "This Month";
+    case DateRangeEnum.LAST_MONTH:
+      return "Last Month";
+    case DateRangeEnum.THIS_YEAR:
+      return "This Year";
+    case DateRangeEnum.LAST_YEAR:
+      return "Last Year";
+    case DateRangeEnum.LAST_3_MONTHS:
+      return "Last 3 Months";
+    case DateRangeEnum.ALL_TIME:
+      return "All Time";
+    default:
+      return "Custom Range";
+  }
 }
